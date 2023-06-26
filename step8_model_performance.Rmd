@@ -1,0 +1,142 @@
+---
+title: "Crab Age Prediction"
+subtitle: "Model Performance"
+author: "John Thompson"
+date: '`r Sys.Date()`'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE,
+                      message=FALSE)
+
+library(tidyverse)
+library(fs)
+library(fileArchive)
+library(xgboost)
+library(earth)
+cache   <- "C:/Projects/Kaggle/Playground/crab/data/cache"
+archive <- "C:/Projects/Kaggle/Playground/crab/data/repos"
+
+readRDS( path(archive, "estimate.rds")) -> estimateDF
+readRDS( path(archive, "validate.rds")) -> validateDF
+readRDS( path(archive, "xgboost.rds"))  -> xgb
+readRDS( path(archive, "mars.rds"))     -> mrs
+readRDS( path(archive, "cv_mae.rds")) -> maeDF
+```
+
+## Introduction
+
+These data come from the kaggle playground series and are used to model crab age in terms of various measures of size and weight (https://www.kaggle.com/competitions/playground-series-s3e16/data). The data closely resemble the famous abalone dataset.
+
+Two models were fitted one using xgboost and the other using multivariate adaptive regression (MARS).
+
+## xgboost
+
+xgboost was run for 2000 iterations with a learning rate of 0.1 and a maximum tree depth of 4. The objective function was the mean absolute error (MAE).
+
+The plot shows the progress in the loss function for the estimation and validation data.
+```{r}
+# --- show estimation & validation MAE --------------
+xgb$evaluation_log |>
+  ggplot( aes(x=iter, y=train_mae)) +
+  geom_line(colour="blue") +
+  geom_line( aes(y=test_mae), colour="red") +
+  scale_y_continuous( limits = c(1.0, 2.5), breaks=seq(1.0, 2.5, by=.5)) +
+  labs(x="Iteration", y="mean absolute error",
+       title="In-sample and out-of-sample MAE")
+```
+
+The in-sample MAE reduced to
+```{r}
+estimateDF |>
+  select( -id, -age ) |>
+  as.matrix() -> X
+
+estimateDF |>
+  mutate(yhat = predict(xgb, newdata=X)) |>
+  summarise( mean(abs(age-yhat)))
+```
+
+and the out-of-sample MAE reduced to
+```{r}
+validateDF |>
+  select( -id, -age ) |>
+  as.matrix() -> X
+
+validateDF |>
+  mutate(yhat = predict(xgb, newdata=X)) |>
+  summarise( mean(abs(age-yhat)))
+```
+
+## MARS
+
+MARS was run with degree (level of interaction) set to 3.
+
+The final model was
+```{r}
+summary(mrs)
+```
+
+The in-sample MAE reduced to
+```{r}
+estimateDF |>
+  mutate(yhat = predict(mrs)) |>
+  summarise( mean(abs(age-yhat)))
+```
+
+and the out-of-sample MAE reduced to
+```{r}
+validateDF |>
+  mutate(yhat = predict(mrs, newdata=validateDF)) |>
+  summarise( mean(abs(age-yhat)))
+```
+
+## Average prediction
+
+Taking the average of the xgb prediction and the mars prediction
+
+The in-sample MAE becomes
+```{r}
+estimateDF |>
+  select( -id, -age ) |>
+  as.matrix() -> X
+
+estimateDF |>
+  mutate(yhat = (predict(mrs) + predict(xgb, newdata=X))/2 ) |>
+  summarise( mean(abs(age-yhat)))
+```
+
+and the out-of-sample MAE becomes
+```{r}
+validateDF |>
+  select( -id, -age ) |>
+  as.matrix() -> X
+
+validateDF |>
+  mutate(yhat = (predict(mrs, newdata=validateDF) +
+                   predict(xgb, newdata=X)) /2 ) |>
+  summarise( mean(abs(age-yhat)))
+```
+## Cross-validation
+
+10 fold cv produced results that confirm the findings from the validation sample.
+```{r}
+maeDF |>
+  print() |>
+  summarise( mInXgb = mean(in_xgb),
+             sInXgb = sd(in_xgb),
+             mOuXgb = mean(out_xgb),
+             sOuXgb = sd(out_xgb),
+             mInMrs = mean(in_mrs),
+             sInMrs = sd(in_mrs),
+             mOuMrs = mean(out_mrs),
+             sOuMrs = sd(out_mrs) ) |>
+  pivot_longer(everything(), names_to="col", values_to="mae")
+```
+
+## Conclusions
+
+- There is less over-fitting with MARS but the predictive performance is worse (MAE 1.47 vs 1.40).
+- Combining XGBoost and MARS does not improve the in-sample performance compared with XGBoost alone
+- Neither model has been tuned

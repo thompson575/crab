@@ -1,0 +1,163 @@
+---
+title: "Crab Age Prediction"
+subtitle: "EDA of Cleaned Data"
+author: "John Thompson"
+date: '`r Sys.Date()`'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE,
+                      message=FALSE)
+
+library(tidyverse)
+library(fs)
+library(fileArchive)
+cache   <- "C:/Projects/Kaggle/Playground/crab/data/cache"
+archive <- "C:/Projects/Kaggle/Playground/crab/data/repos"
+
+readRDS( path(archive, "clean.rds")) |>
+  as_tibble() -> cleanDF
+```
+
+## Introduction
+
+These data come from the kaggle playground series and are used to model crab age in terms of various measures of size and weight (https://www.kaggle.com/competitions/playground-series-s3e16/data). The data closely resemble the famous abalone dataset.
+
+## Cleaned Data
+
+The cleaned training data have outliers replaced by randomly generated values centred on the predictions based on the remaining predictors.
+
+The training data include an identifier (id), eight predictors and a response (age). The sex variable has three levels "M" (male), "F" (female) and "I" (indeterminate). The other predictors are continuous.
+
+```{r}
+names(cleanDF)
+```
+
+There are data on `r nrow(cleanDF)` crabs with no missing values.
+
+
+## length
+
+Length is measured in feet. As expected older crabs tend to be longer.
+
+```{r}
+cleanDF |>
+  ggplot( aes(x=length, y=age, colour=sex)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Age by Length")
+```
+
+## diameter
+
+Diameter is measured in feet. As expected older crabs tend to be wider.
+
+```{r}
+cleanDF |>
+  ggplot( aes(x=diameter, y=age, colour=sex)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Age by Diameter")
+```
+
+## height
+
+Height is measured in feet. As expected older crabs tend to be higher.
+
+```{r}
+cleanDF |>
+  ggplot( aes(x=height, y=age, colour=sex)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Age by Height")
+```
+
+
+## weight
+
+Weight is measured in ounces. As expected older crabs tend to be heavier.
+
+```{r}
+cleanDF |>
+  ggplot( aes(x=weight, y=age, colour=sex)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Age by Weight")
+```
+
+## shuckedWeight
+
+Shucked weight is measured in ounces. It is the weight of the crab without its shell. As expected older crabs tend to be heavier.
+
+```{r}
+cleanDF |>
+  ggplot( aes(x=shuckedWeight, y=age, colour=sex)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Age by Shucked Weight")
+```
+
+## visceraWeight
+
+Viscera weight is measured in ounces. It is the weight of part of the internal organs, so should be less than the shuckedWeight. As expected older crabs tend to be heavier.
+
+```{r}
+cleanDF |>
+  ggplot( aes(x=visceraWeight, y=age, colour=sex)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Age by Viscera Weight")
+```
+
+Shucked weight should be greater than viscera weight and it usually is.
+
+```{r}
+cleanDF |>
+  ggplot( aes(x=visceraWeight, y=shuckedWeight)) +
+  geom_point() +
+  geom_abline() +
+  labs(title = "Shucked weight by Viscera weight")
+```
+
+## shellWeight
+
+Shell weight is measured in ounces. As expected older crabs tend to have heavier shells.
+
+```{r}
+cleanDF |>
+  ggplot( aes(x=shellWeight, y=age, colour=sex)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Age by Shell Weight")
+```
+
+Weight ought to be shucked weight plus shell weight but clearly isn't.
+
+```{r}
+cleanDF |>
+  mutate( wt = shuckedWeight + shellWeight) |>
+  ggplot( aes(x=wt, y=weight)) +
+  geom_point() +
+  geom_abline() +
+  labs(x = "Shucked weight + Shell weight",
+       title = "Weight by Summed Components of Weight")
+```
+
+Instances where shucked weight + shell weight is greater than the total weight must point to errors in the data.  
+
+Perhaps viscera are excluded from the shucked weight.
+```{r}
+cleanDF |>
+  mutate( wt = shuckedWeight + shellWeight + visceraWeight) |>
+  ggplot( aes(x=wt, y=weight)) +
+  geom_point() +
+  geom_abline() +
+  labs(x = "Shucked weight + Shell weight + Viscera weight",
+       title = "Weight by Summed Components of Weight")
+```
+
+
+## Conclusions
+
+The clean data appear to be free of most of the obvious data errors.

@@ -1,0 +1,198 @@
+---
+title: "Crab Age Prediction"
+author: "John Thompson"
+date: '`r Sys.Date()`'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE,
+                      message=FALSE)
+
+library(tidyverse)
+library(fs)
+library(fileArchive)
+cache   <- "C:/Projects/Kaggle/Playground/crab/data/cache"
+archive <- "C:/Projects/Kaggle/Playground/crab/data/repos"
+
+readRDS( path(archive, "train.rds")) |>
+  as_tibble() -> trainDF
+```
+
+## Introduction
+
+These data come from the kaggle playground series and are used to model crab age in terms of various measures of size and weight (https://www.kaggle.com/competitions/playground-series-s3e16/data). The data closely resemble the famous abalone dataset.
+
+## Training Data
+
+The training data include an identifier (id), eight predictors and a response (age). The sex variable has three levels "M" (male), "F" (female) and "I" (indeterminate). The other predictors are continuous.
+
+```{r}
+names(trainDF)
+```
+
+There are data on `r nrow(trainDF)` crabs with no missing values.
+
+## Age
+
+Age is measured in months.
+
+```{r}
+trainDF |>
+  ggplot( aes(x=age)) +
+  geom_histogram( binwidth=1) +
+  facet_grid(sex ~ .) +
+  labs(title = "Histograms of Age")
+```
+
+## Sex
+
+There are roughly equal numbers in the three categories of sex. It is the young crabs that tend to have indeterminate sex.
+
+```{r}
+trainDF |>
+  group_by(sex) |>
+  summarise( n = n(),
+             meanAge = mean(age)) |>
+  mutate( pct = 100 * n / sum(n))
+```
+
+## length
+
+Length is measured in feet. As expected older crabs tend to be longer.
+
+```{r}
+trainDF |>
+  ggplot( aes(x=length, y=age, colour=sex)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Age by Length")
+```
+
+## diameter
+
+Diameter is measured in feet. As expected older crabs tend to be wider.
+
+```{r}
+trainDF |>
+  ggplot( aes(x=diameter, y=age, colour=sex)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Age by Diameter")
+```
+
+## height
+
+Height is measured in feet. As expected older crabs tend to be higher.
+
+```{r}
+trainDF |>
+  ggplot( aes(x=height, y=age, colour=sex)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Age by Height")
+```
+
+Height contains a few outliers and some zeros. Omitting the zeros and heights over 0.75 feet.
+
+```{r}
+trainDF |>
+  filter( height > 0 & height < 0.75) |>
+  ggplot( aes(x=height, y=age, colour=sex)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Age by Height")
+```
+
+
+## weight
+
+Weight is measured in ounces. As expected older crabs tend to be heavier.
+
+```{r}
+trainDF |>
+  ggplot( aes(x=weight, y=age, colour=sex)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Age by Weight")
+```
+
+## shuckedWeight
+
+Shucked weight is measured in ounces. It is the weight of the crab without its shell. As expected older crabs tend to be heavier.
+
+```{r}
+trainDF |>
+  ggplot( aes(x=shuckedWeight, y=age, colour=sex)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Age by Shucked Weight")
+```
+
+## visceraWeight
+
+Viscera weight is measured in ounces. It is the weight of part of the internal organs, so should be less than the shuckedWeight. As expected older crabs tend to be heavier.
+
+```{r}
+trainDF |>
+  ggplot( aes(x=visceraWeight, y=age, colour=sex)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Age by Viscera Weight")
+```
+
+Shucked weight should be greater than viscera weight and it usually is.
+
+```{r}
+trainDF |>
+  ggplot( aes(x=visceraWeight, y=shuckedWeight)) +
+  geom_point() +
+  geom_abline() +
+  labs(title = "Shucked weight by Viscera weight")
+```
+
+## shellWeight
+
+Shell weight is measured in ounces. As expected older crabs tend to have heavier shells.
+
+```{r}
+trainDF |>
+  ggplot( aes(x=shellWeight, y=age, colour=sex)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Age by Shell Weight")
+```
+
+Weight ought to be shucked weight plus shell weight but clearly isn't.
+
+```{r}
+trainDF |>
+  mutate( wt = shuckedWeight + shellWeight) |>
+  ggplot( aes(x=wt, y=weight)) +
+  geom_point() +
+  geom_abline() +
+  labs(x = "Shucked weight + Shell weight",
+       title = "Weight by Summed Components of Weight")
+```
+
+Instances where shucked weight + shell weight is greater than the total weight must point to errors in the data.  
+
+Perhaps viscera are excluded from the shucked weight.
+```{r}
+trainDF |>
+  mutate( wt = shuckedWeight + shellWeight + visceraWeight) |>
+  ggplot( aes(x=wt, y=weight)) +
+  geom_point() +
+  geom_abline() +
+  labs(x = "Shucked weight + Shell weight + Viscera weight",
+       title = "Weight by Summed Components of Weight")
+```
+
+
+## Conclusions
+
+- The predictors are highly correlated  
+- There are clear errors in the data but they are rare  
+- Height contains some impossible values  
+
+A key question is whether to clean the data before modelling it.
